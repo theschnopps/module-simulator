@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gacha Pity Simulator</title>
+<style>
+  :root {
+    --bg: #17181c;
+    --panel: #1f2128;
+    --panel-border: #2c2f38;
+    --accent: #7c9eff;
+    --accent-soft: #2a3352;
+    --text: #e8e9ee;
+    --text-dim: #9a9ea8;
+    --good: #6fd48a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .subtitle { color: var(--text-dim); font-size: 0.9rem; margin: 0 0 20px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin: 0 0 14px;
+  }
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  label {
+    display: block;
+    font-size: 0.88rem;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  input[type=number] {
+    width: 100%;
+    background: #14151a;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 8px 10px;
+    font-size: 0.9rem;
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  button.run {
+    width: 100%;
+    background: var(--accent);
+    color: #14151a;
+    border: none;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  button.run:active { opacity: 0.85; }
+  button.run:disabled { opacity: 0.5; }
+  button.secondary {
+    width: 100%;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+  .results { display: none; }
+  .results.show { display: block; }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .stat {
+    background: #14151a;
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .stat .label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat .value { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
+  .stat .value.accent { color: var(--accent); }
+  .stat .value.good { color: var(--good); }
+  .hist { margin-top: 16px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+  .bar-label { width: 78px; font-size: 0.7rem; color: var(--text-dim); text-align: right; flex-shrink: 0; }
+  .bar-track { flex: 1; background: #14151a; border-radius: 4px; overflow: hidden; height: 14px; }
+  .bar-fill { height: 100%; background: var(--accent-soft); border-left: 2px solid var(--accent); }
+  .note {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-top: 14px;
+  }
+  .loading { text-align: center; color: var(--text-dim); font-size: 0.9rem; padding: 20px 0; display: none; }
+  .loading.show { display: block; }
+  .owned-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 12px;
+    margin-top: 10px;
+  }
+  .owned-cell label {
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    margin-bottom: 3px;
+  }
+  .owned-cell input {
+    padding: 6px 6px;
+    text-align: center;
+    font-size: 0.85rem;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Gacha Pity Simulator</h1>
+  <p class="subtitle">Estimate the expected cost to collect N copies of every rare item, when maxed-out items stay in the pool at a reduced rate.</p>
+
+  <div class="panel">
+    <h2>Purchase settings</h2>
+    <div class="field">
+      <label>Cost per purchase (gems)</label>
+      <input type="number" id="cost" min="1" value="20">
+    </div>
+    <div class="field">
+      <label>Chance a purchase is a rare item (1 in X)</label>
+      <input type="number" id="oddsX" min="2" value="40">
+    </div>
+    <div class="field">
+      <label>Hard pity: guaranteed rare by purchase #</label>
+      <input type="number" id="pity" min="2" value="150">
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Rare item pool</h2>
+    <div class="row2">
+      <div class="field">
+        <label>Epics available from standard pool</label>
+        <input type="number" id="types" min="1" value="24">
+      </div>
+      <div class="field">
+        <label>Target copies needed per type</label>
+        <input type="number" id="target" min="1" value="18">
+      </div>
+    </div>
+    <div class="field">
+      <label>Rate reduction once maxed, in percentage points</label>
+      <input type="number" id="reduction" min="0" step="0.1" value="3.0">
+    </div>
+    <div class="note" id="rateNote"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Copies you currently have</h2>
+    <p class="note" style="margin-top:0;">Enter how many copies of each epic you already own. Any type already at or above the target starts the simulation already maxed out.</p>
+    <div class="owned-grid" id="ownedGrid"></div>
+    <button class="secondary" id="resetOwned">Reset all to 0</button>
+  </div>
+
+  <div class="panel">
+    <h2>Simulation</h2>
+    <div class="field">
+      <label>Number of trials</label>
+      <input type="number" id="trials" min="100" step="100" value="3000">
+    </div>
+    <button class="run" id="runBtn">Run Simulation</button>
+    <div class="loading" id="loading">Simulating…</div>
+  </div>
+
+  <div class="panel results" id="results">
+    <h2>Results</h2>
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="label">Avg. Purchases</div>
+        <div class="value" id="r_purchases">–</div>
+      </div>
+      <div class="stat">
+        <div class="label">Avg. Gems</div>
+        <div class="value accent" id="r_gems">–</div>
+      </div>
+      <div class="stat">
+        <div class="label">Std. Error (gems)</div>
+        <div class="value" id="r_se">–</div>
+      </div>
+      <div class="stat">
+        <div class="label">Min / Max Gems</div>
+        <div class="value good" id="r_minmax">–</div>
+      </div>
+    </div>
+    <div class="hist" id="hist"></div>
+  </div>
+
+  <p class="note">
+    Method: each purchase has a 1/X chance of yielding a rare item, but if that many purchases pass without one,
+    the pity counter forces a guaranteed rare on that purchase (resetting the counter either way). Rare types start
+    with an equal share of that rare pool (adjusted for any that are already maxed, based on what you've entered).
+    Once a type reaches its target copy count, its share drops by the reduction amount and the freed percentage
+    is spread evenly across the remaining not-yet-maxed types — mirroring "soft pity" systems where completed items
+    keep dropping as duplicates instead of disappearing. Because both the pity timing and the redistribution path
+    are random, there's no closed-form formula — this tool re-runs the process many times to estimate the true average.
+  </p>
+</div>
+
+<script>
+function $(id){ return document.getElementById(id); }
+
+const cost = $('cost'), oddsX = $('oddsX'), types = $('types'), target = $('target'), reduction = $('reduction'), trials = $('trials'), pity = $('pity');
+const ownedGrid = $('ownedGrid');
+
+let ownedValues = [];
+
+const epicNames = [
+  "Havoc Bringer", "Death Penalty", "Being Annihilator", "Astral Deliverance",
+  "Shrink Ray", "Amplifying Strike", "Wormhole Redirector", "Negative Mass Projector",
+  "Space Displacer", "Anti-Cube Portal", "Sharp Fortitude", "Orbital Augment",
+  "Black Hole Digestor", "Pulsar Harvester", "Galaxy Compressor", "Singularity Harness",
+  "Project Funding", "Restorative Bonus", "Multiverse Nexus", "Dimension Core",
+  "Harmony Conductor", "Om Chip", "Magnetic Hook", "Primordial Collapse"
+];
+function epicName(i){
+  return epicNames[i] !== undefined ? epicNames[i] : `Type ${i+1}`;
+}
+
+function renderOwnedGrid(){
+  const n = Math.max(1, parseInt(types.value) || 1);
+  // preserve existing values where possible
+  const newValues = [];
+  for (let i = 0; i < n; i++) {
+    newValues.push(ownedValues[i] !== undefined ? ownedValues[i] : 0);
+  }
+  ownedValues = newValues;
+
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    html += `<div class="owned-cell">
+      <label>${epicName(i)}</label>
+      <input type="number" min="0" class="owned-input" data-idx="${i}" value="${ownedValues[i]}">
+    </div>`;
+  }
+  ownedGrid.innerHTML = html;
+
+  document.querySelectorAll('.owned-input').forEach(el => {
+    el.addEventListener('input', () => {
+      const idx = parseInt(el.dataset.idx);
+      ownedValues[idx] = parseInt(el.value) || 0;
+    });
+  });
+}
+
+$('resetOwned').addEventListener('click', () => {
+  ownedValues = ownedValues.map(() => 0);
+  renderOwnedGrid();
+});
+
+types.addEventListener('input', renderOwnedGrid);
+
+function updateNote(){
+  const n = parseInt(types.value) || 1;
+  const base = 100/n;
+  const red = parseFloat(reduction.value) || 0;
+  const reducedRate = Math.max(0, base - red);
+  $('rateNote').textContent =
+    `Each type starts at ${base.toFixed(4)}% of the rare pool. Once maxed, it drops to ${reducedRate.toFixed(4)}%, ` +
+    `and the freed ${red.toFixed(1)}% spreads across whatever types are still uncapped.`;
+}
+[types, reduction].forEach(el => el.addEventListener('input', updateNote));
+updateNote();
+renderOwnedGrid();
+
+function simulateOne(nTypes, targetCopies, oddsXVal, reductionPts, pityLimit, initialCounts){
+  const base = 100/nTypes;
+  const reducedRate = Math.max(0, base - reductionPts);
+  let weights = new Array(nTypes).fill(base);
+  let counts = initialCounts.slice();
+  let capped = new Array(nTypes).fill(false);
+  let cappedCount = 0;
+  let purchases = 0;
+  let sinceLastEpic = 0;
+  const epicChance = 1/oddsXVal;
+
+  // pre-cap any types that already meet/exceed the target
+  for (let i = 0; i < nTypes; i++) {
+    if (counts[i] >= targetCopies) {
+      const freed = weights[i] - reducedRate;
+      capped[i] = true;
+      cappedCount++;
+      weights[i] = reducedRate;
+      const remaining = [];
+      for (let j = 0; j < nTypes; j++) if (!capped[j]) remaining.push(j);
+      if (remaining.length > 0) {
+        const add = freed / remaining.length;
+        for (const j of remaining) weights[j] += add;
+      }
+    }
+  }
+
+  while (cappedCount < nTypes) {
+    purchases++;
+    sinceLastEpic++;
+    const isEpic = (sinceLastEpic >= pityLimit) || (Math.random() < epicChance);
+    if (isEpic) {
+      sinceLastEpic = 0;
+      const r = Math.random() * 100;
+      let cum = 0, chosen = nTypes - 1;
+      for (let i = 0; i < nTypes; i++) {
+        cum += weights[i];
+        if (r <= cum) { chosen = i; break; }
+      }
+      counts[chosen]++;
+      if (counts[chosen] === targetCopies && !capped[chosen]) {
+        const freed = weights[chosen] - reducedRate;
+        capped[chosen] = true;
+        cappedCount++;
+        weights[chosen] = reducedRate;
+        const remaining = [];
+        for (let i = 0; i < nTypes; i++) if (!capped[i]) remaining.push(i);
+        if (remaining.length > 0) {
+          const add = freed / remaining.length;
+          for (const i of remaining) weights[i] += add;
+        }
+      }
+    }
+    // safety valve for pathological inputs
+    if (purchases > 20000000) break;
+  }
+  return purchases;
+}
+
+function runSimulation(){
+  $('runBtn').disabled = true;
+  $('loading').classList.add('show');
+  $('results').classList.remove('show');
+
+  setTimeout(() => {
+    const n = parseInt(types.value);
+    const tgt = parseInt(target.value);
+    const oddsXVal = parseInt(oddsX.value);
+    const red = parseFloat(reduction.value);
+    const gemCost = parseFloat(cost.value);
+    const nTrials = parseInt(trials.value);
+    const pityVal = parseInt(pity.value);
+    const initialCounts = [];
+    for (let i = 0; i < n; i++) initialCounts.push(ownedValues[i] || 0);
+
+    const results = new Array(nTrials);
+    for (let t = 0; t < nTrials; t++) {
+      results[t] = simulateOne(n, tgt, oddsXVal, red, pityVal, initialCounts);
+    }
+
+    const meanP = results.reduce((a,b) => a+b, 0) / nTrials;
+    const variance = results.reduce((a,b) => a + (b-meanP)*(b-meanP), 0) / (nTrials - 1);
+    const se = Math.sqrt(variance / nTrials);
+    const minP = Math.min(...results);
+    const maxP = Math.max(...results);
+
+    const meanGems = meanP * gemCost;
+    const seGems = se * gemCost;
+
+    $('r_purchases').textContent = Math.round(meanP).toLocaleString();
+    $('r_gems').textContent = Math.round(meanGems).toLocaleString();
+    $('r_se').textContent = '± ' + Math.round(seGems).toLocaleString();
+    $('r_minmax').textContent = Math.round(minP*gemCost).toLocaleString() + ' / ' + Math.round(maxP*gemCost).toLocaleString();
+
+    // simple histogram (10 buckets)
+    const buckets = 10;
+    const bucketSize = (maxP - minP) / buckets || 1;
+    const hcounts = new Array(buckets).fill(0);
+    for (const r of results) {
+      let idx = Math.floor((r - minP) / bucketSize);
+      if (idx >= buckets) idx = buckets - 1;
+      if (idx < 0) idx = 0;
+      hcounts[idx]++;
+    }
+    const maxCount = Math.max(...hcounts);
+    let histHtml = '';
+    for (let i = 0; i < buckets; i++) {
+      const lo = Math.round((minP + i*bucketSize) * gemCost);
+      const pct = (hcounts[i] / maxCount) * 100;
+      histHtml += `<div class="bar-row">
+        <div class="bar-label">${lo.toLocaleString()}g</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }
+    $('hist').innerHTML = histHtml;
+
+    $('loading').classList.remove('show');
+    $('results').classList.add('show');
+    $('runBtn').disabled = false;
+  }, 30);
+}
+
+$('runBtn').addEventListener('click', runSimulation);
+</script>
+</body>
+</html>
